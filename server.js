@@ -79,7 +79,7 @@ app.post('/api/verify-serial', (req, res) => {
     res.json({ success: true, message: "Serial Key verified successfully!" });
 });
 
-// 3. Admin: Create New User (With Name & Mobile)
+// 3. Admin: Create New User
 app.post('/api/admin/create-user', (req, res) => {
     const { admin_pass, username, password, expiry, name, mobile } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -106,7 +106,20 @@ app.post('/api/admin/create-user', (req, res) => {
     res.json({ success: true, message: "User ban gaya!" });
 });
 
-// 4. Admin Actions: Reset Password, Regenerate Serial, Regenerate OTP
+// 4. Admin: Delete User API
+app.post('/api/admin/delete-user', (req, res) => {
+    const { admin_pass, username } = req.body;
+    if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const usersDatabase = loadUsers();
+    if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
+
+    delete usersDatabase[username];
+    saveUsers(usersDatabase);
+    res.json({ success: true, message: "User delete ho gaya!" });
+});
+
+// 5. Admin Actions: Reset Password, Regenerate Serial, Regenerate OTP
 app.post('/api/admin/action', (req, res) => {
     const { admin_pass, username, actionType } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -128,7 +141,7 @@ app.post('/api/admin/action', (req, res) => {
     res.json({ success: true, message: "Action successful!" });
 });
 
-// 5. Verify & Regenerate Lat/Long Password
+// 6. Verify & Regenerate Lat/Long Password
 app.post('/api/verify-latlong-pass', (req, res) => {
     const { username, pass } = req.body;
     const usersDatabase = loadUsers();
@@ -145,7 +158,7 @@ app.post('/api/verify-latlong-pass', (req, res) => {
     }
 });
 
-// 6. Change Password API
+// 7. Change Password API
 app.post('/api/change-password', (req, res) => {
     const { username, oldPassword, newPassword } = req.body;
     const usersDatabase = loadUsers();
@@ -160,7 +173,7 @@ app.post('/api/change-password', (req, res) => {
     res.json({ success: true, message: "Password kamyabi se badal gaya!" });
 });
 
-// 7. Admin: Update Status / Expiry / Get Users
+// 8. Admin: Update Status / Expiry / Get Users
 app.post('/api/admin/update-status', (req, res) => {
     const { admin_pass, username, status } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
