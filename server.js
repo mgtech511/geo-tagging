@@ -2,34 +2,34 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// Server par users ka data store karne ke liye (Aap ise database se bhi jod sakte hain)
+// Cloud Database (Memory Store for Users)
 let usersDatabase = {
-    "user1": { status: "active", version: "1.0.0", expiry: "2026-12-31" },
-    "user2": { status: "active", version: "1.0.0", expiry: "2026-12-31" }
+    "admin": { password: "admin@1", status: "active", expiry: "2029-12-31", serialKey: "ADMINKEY00", isKeyUsed: true, role: "admin" }
 };
 
 const LATEST_VERSION = "1.0.1";
 const DOWNLOAD_URL = "https://mgtechsolution.in.net/downloads/latest-app.apk";
 
-// 1. App dwara status check karne ke liye API
+// 1. Check Status & Expiry API
 app.get('/api/check-status', (req, res) => {
     const deviceId = req.query.device_id;
     const user = usersDatabase[deviceId];
 
     if (!user) {
-        // Agar user server par nahi hai, toh default active ya block set kar sakte hain
-        return res.json({ 
-            deviceId: deviceId, 
-            status: "active", 
-            updateAvailable: false,
-            latestVersion: LATEST_VERSION,
-            downloadUrl: DOWNLOAD_URL 
-        });
+        return res.json({ status: "not_found", updateAvailable: false });
+    }
+
+    // Expiry check
+    if (user.expiry) {
+        const expiryDate = new Date(user.expiry);
+        if (new Date() > expiryDate) {
+            return res.json({ status: "expired", expiry: user.expiry });
+        }
     }
 
     res.json({
         deviceId: deviceId,
-        status: user.status, // "active" ya "deactive"
+        status: user.status, // "active" or "deactive"
         expiry: user.expiry,
         updateAvailable: user.version !== LATEST_VERSION,
         latestVersion: LATEST_VERSION,
@@ -37,25 +37,78 @@ app.get('/api/check-status', (req, res) => {
     });
 });
 
-// 2. Admin dwara kahin se bhi user ko Active/Deactive karne ke liye API
-app.post('/api/update-status', (req, res) => {
-    const { admin_pass, device_id, status } = req.body;
+// 2. Verify Serial Key API (First time install)
+app.post('/api/verify-serial', (req, res) => {
+    const { username, serialKey } = req.body;
+    const user = usersDatabase[username];
 
-    // Security check for admin
-    if (admin_pass !== "admin@1") {
-        return res.status(401).json({ success: false, message: "Unauthorized Admin Password" });
+    if (!user) {
+        return res.json({ success: false, message: "User nahi mila!" });
     }
 
-    if (!usersDatabase[device_id]) {
-        usersDatabase[device_id] = { status: "active", version: "1.0.0", expiry: "2026-12-31" };
+    if (user.serialKey !== serialKey) {
+        return res.json({ success: false, message: "Galat Serial Key!" });
     }
 
-    usersDatabase[device_id].status = status; // "active" or "deactive"
-    res.json({ success: true, message: `Device ${device_id} status updated to ${status}` });
+    if (user.isKeyUsed) {
+        return res.json({ success: false, message: "Serial Key pehle hi use ho chuki hai!" });
+    }
+
+    user.isKeyUsed = true;
+    res.json({ success: true, message: "Serial Key verified successfully!" });
 });
 
-// Server Port
+// 3. Admin: Create New User
+app.post('/api/admin/create-user', (req, res) => {
+    const { admin_pass, username, password, expiry } = req.body;
+    if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    if (usersDatabase[username]) {
+        return res.json({ success: false, message: "User pehle se maujud hai!" });
+    }
+
+    const randomKey = Math.floor(1000000000 + Math.random() * 900000000).toString();
+
+    usersDatabase[username] = {
+        password: password || "12345",
+        status: "deactive", // Default deactive
+        expiry: expiry || "2026-12-31",
+        serialKey: randomKey,
+        isKeyUsed: false,
+        role: "client"
+    };
+
+    res.json({ success: true, serialKey: randomKey, message: "User ban gaya!" });
+});
+
+// 4. Admin: Update Status (Active/Deactive)
+app.post('/api/admin/update-status', (req, res) => {
+    const { admin_pass, username, status } = req.body;
+    if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
+
+    usersDatabase[username].status = status; // "active" or "deactive"
+    res.json({ success: true, message: `Status updated to ${status}` });
+});
+
+// 5. Admin: Update Expiry Date
+app.post('/api/admin/update-expiry', (req, res) => {
+    const { admin_pass, username, expiry } = req.body;
+    if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
+
+    usersDatabase[username].expiry = expiry;
+    res.json({ success: true, message: `Expiry updated to ${expiry}` });
+});
+
+// 6. Get All Users for Admin
+app.get('/api/admin/get-users', (req, res) => {
+    res.json(usersDatabase);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`MG Tech Server running on port ${PORT}`);
+    console.log(`Cloud Server running on port ${PORT}`);
 });
