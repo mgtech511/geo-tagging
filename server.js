@@ -2,42 +2,31 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// Cloud Database (Memory Store for Users)
 let usersDatabase = {
-    "admin": { password: "admin@1", status: "active", expiry: "2029-12-31", serialKey: "ADMINKEY00", isKeyUsed: true, role: "admin" }
+    "admin": { password: "admin@1", status: "active", expiry: "2029-12-31", serialKey: "ADMINKEY", isKeyUsed: true, role: "admin" }
 };
 
-const LATEST_VERSION = "1.0.1";
-const DOWNLOAD_URL = "https://mgtechsolution.in.net/downloads/latest-app.apk";
+// 1. Login API
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    const user = usersDatabase[username];
 
-// 1. Check Status & Expiry API
-app.get('/api/check-status', (req, res) => {
-    const deviceId = req.query.device_id;
-    const user = usersDatabase[deviceId];
-
-    if (!user) {
-        return res.json({ status: "not_found", updateAvailable: false });
+    if (!user || user.password !== password) {
+        return.json({ success: false, message: "Galat Username ya Password!" });
     }
 
-    // Expiry check
-    if (user.expiry) {
-        const expiryDate = new Date(user.expiry);
-        if (new Date() > expiryDate) {
-            return res.json({ status: "expired", expiry: user.expiry });
-        }
+    if (user.status === 'deactive') {
+        return.json({ success: false, message: "Yeh account deactive hai!" });
     }
 
-    res.json({
-        deviceId: deviceId,
-        status: user.status, // "active" or "deactive"
-        expiry: user.expiry,
-        updateAvailable: user.version !== LATEST_VERSION,
-        latestVersion: LATEST_VERSION,
-        downloadUrl: DOWNLOAD_URL
-    });
+    if (user.expiry && new Date() > new Date(user.expiry)) {
+        return.json({ success: false, message: "Aapka license expire ho chuka hai!" });
+    }
+
+    res.json({ success: true, role: user.role, expiry: user.expiry });
 });
 
-// 2. Verify Serial Key API (First time install)
+// 2. Verify Serial Key API (Only for clients on first login)
 app.post('/api/verify-serial', (req, res) => {
     const { username, serialKey } = req.body;
     const user = usersDatabase[username];
@@ -71,7 +60,7 @@ app.post('/api/admin/create-user', (req, res) => {
 
     usersDatabase[username] = {
         password: password || "12345",
-        status: "deactive", // Default deactive
+        status: "deactive",
         expiry: expiry || "2026-12-31",
         serialKey: randomKey,
         isKeyUsed: false,
@@ -88,7 +77,7 @@ app.post('/api/admin/update-status', (req, res) => {
 
     if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
 
-    usersDatabase[username].status = status; // "active" or "deactive"
+    usersDatabase[username].status = status;
     res.json({ success: true, message: `Status updated to ${status}` });
 });
 
@@ -103,12 +92,12 @@ app.post('/api/admin/update-expiry', (req, res) => {
     res.json({ success: true, message: `Expiry updated to ${expiry}` });
 });
 
-// 6. Get All Users for Admin
+// 6. Get All Users for Admin Panel
 app.get('/api/admin/get-users', (req, res) => {
     res.json(usersDatabase);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Cloud Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
