@@ -6,12 +6,18 @@ app.use(express.json());
 
 const DATA_FILE = path.join(__dirname, 'users.json');
 
-// Initial default users
 const defaultUsers = {
-    "admin": { password: "admin@1", status: "active", expiry: "2029-12-31", serialKey: "ADMINKEY", isKeyUsed: true, role: "admin" }
+    "admin": { 
+        password: "admin@1", 
+        status: "active", 
+        expiry: "2029-12-31", 
+        serialKey: "ADMINKEY", 
+        isKeyUsed: true, 
+        role: "admin",
+        latLongPass: "123456"
+    }
 };
 
-// Helper function to load users from file
 function loadUsers() {
     try {
         if (!fs.existsSync(DATA_FILE)) {
@@ -21,18 +27,18 @@ function loadUsers() {
         const fileData = fs.readFileSync(DATA_FILE, 'utf8');
         return JSON.parse(fileData);
     } catch (e) {
-        console.error("Error reading users file:", e);
         return defaultUsers;
     }
 }
 
-// Helper function to save users to file
 function saveUsers(usersData) {
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(usersData, null, 2));
-    } catch (e) {
-        console.error("Error saving users file:", e);
-    }
+    } catch (e) {}
+}
+
+function generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 // 1. Login API
@@ -62,17 +68,9 @@ app.post('/api/verify-serial', (req, res) => {
     const usersDatabase = loadUsers();
     const user = usersDatabase[username];
 
-    if (!user) {
-        return res.json({ success: false, message: "User nahi mila!" });
-    }
-
-    if (user.serialKey !== serialKey) {
-        return res.json({ success: false, message: "Galat Serial Key!" });
-    }
-
-    if (user.isKeyUsed) {
-        return res.json({ success: false, message: "Serial Key pehle hi use ho chuki hai!" });
-    }
+    if (!user) return res.json({ success: false, message: "User nahi mila!" });
+    if (user.serialKey !== serialKey) return res.json({ success: false, message: "Galat Serial Key!" });
+    if (user.isKeyUsed) return res.json({ success: false, message: "Serial Key pehle hi use ho chuki hai!" });
 
     user.isKeyUsed = true;
     saveUsers(usersDatabase);
@@ -85,56 +83,84 @@ app.post('/api/admin/create-user', (req, res) => {
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const usersDatabase = loadUsers();
-
-    if (usersDatabase[username]) {
-        return res.json({ success: false, message: "User pehle se maujud hai!" });
-    }
+    if (usersDatabase[username]) return res.json({ success: false, message: "User pehle se maujud hai!" });
 
     const randomKey = Math.floor(1000000000 + Math.random() * 900000000).toString();
+    const initialLatLongPass = generateOTP();
 
     usersDatabase[username] = {
         password: password || "12345",
-        status: "active", // Default active
+        status: "active",
         expiry: expiry || "2026-12-31",
         serialKey: randomKey,
         isKeyUsed: false,
-        role: "client"
+        role: "client",
+        latLongPass: initialLatLongPass
     };
 
     saveUsers(usersDatabase);
     res.json({ success: true, serialKey: randomKey, message: "User ban gaya!" });
 });
 
-// 4. Admin: Update Status (Active/Deactive)
+// 4. Verify & Regenerate Lat/Long Password (One-Time Use)
+app.post('/api/verify-latlong-pass', (req, res) => {
+    const { username, pass } = req.body;
+    const usersDatabase = loadUsers();
+    const user = usersDatabase[username];
+
+    if (!user) return res.json({ success: false, message: "User nahi mila" });
+
+    if (user.latLongPass === pass) {
+        user.latLongPass = generateOTP(); // Auto-regenerate OTP after single use
+        saveUsers(usersDatabase);
+        return res.json({ success: true, message: "Password Verified! New OTP Generated." });
+    } else {
+        return res.json({ success: false, message: "Galat Lat/Long Password!" });
+    }
+});
+
+// 5. Change Password API (Profile Option)
+app.post('/api/change-password', (req, res) => {
+    const { username, oldPassword, newPassword } = req.body;
+    const usersDatabase = loadUsers();
+    const user = usersDatabase[username];
+
+    if (!user || user.password !== oldPassword) {
+        return res.json({ success: false, message: "Purana Password Galat Hai!" });
+    }
+
+    user.password = newPassword;
+    saveUsers(usersDatabase);
+    res.json({ success: true, message: "Password kamyabi se badal gaya!" });
+});
+
+// 6. Admin: Update Status / Expiry / Get Users
 app.post('/api/admin/update-status', (req, res) => {
     const { admin_pass, username, status } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const usersDatabase = loadUsers();
-    if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
-
-    usersDatabase[username].status = status;
-    saveUsers(usersDatabase);
-    res.json({ success: true, message: `Status updated to ${status}` });
+    if (usersDatabase[username]) {
+        usersDatabase[username].status = status;
+        saveUsers(usersDatabase);
+    }
+    res.json({ success: true });
 });
 
-// 5. Admin: Update Expiry Date
 app.post('/api/admin/update-expiry', (req, res) => {
     const { admin_pass, username, expiry } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const usersDatabase = loadUsers();
-    if (!usersDatabase[username]) return res.json({ success: false, message: "User nahi mila" });
-
-    usersDatabase[username].expiry = expiry;
-    saveUsers(usersDatabase);
-    res.json({ success: true, message: `Expiry updated to ${expiry}` });
+    if (usersDatabase[username]) {
+        usersDatabase[username].expiry = expiry;
+        saveUsers(usersDatabase);
+    }
+    res.json({ success: true });
 });
 
-// 6. Get All Users for Admin Panel
 app.get('/api/admin/get-users', (req, res) => {
-    const usersDatabase = loadUsers();
-    res.json(usersDatabase);
+    res.json(loadUsers());
 });
 
 const PORT = process.env.PORT || 3000;
