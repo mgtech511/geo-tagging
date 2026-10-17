@@ -14,7 +14,9 @@ const defaultUsers = {
         serialKey: "ADMINKEY", 
         isKeyUsed: true, 
         role: "admin",
-        latLongPass: "123456"
+        latLongPass: "123456",
+        name: "Master Admin",
+        mobile: "9999999999"
     }
 };
 
@@ -77,9 +79,9 @@ app.post('/api/verify-serial', (req, res) => {
     res.json({ success: true, message: "Serial Key verified successfully!" });
 });
 
-// 3. Admin: Create New User
+// 3. Admin: Create New User (With Name & Mobile)
 app.post('/api/admin/create-user', (req, res) => {
-    const { admin_pass, username, password, expiry } = req.body;
+    const { admin_pass, username, password, expiry, name, mobile } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const usersDatabase = loadUsers();
@@ -95,14 +97,38 @@ app.post('/api/admin/create-user', (req, res) => {
         serialKey: randomKey,
         isKeyUsed: false,
         role: "client",
-        latLongPass: initialLatLongPass
+        latLongPass: initialLatLongPass,
+        name: name || "N/A",
+        mobile: mobile || "N/A"
     };
 
     saveUsers(usersDatabase);
-    res.json({ success: true, serialKey: randomKey, message: "User ban gaya!" });
+    res.json({ success: true, message: "User ban gaya!" });
 });
 
-// 4. Verify & Regenerate Lat/Long Password (One-Time Use)
+// 4. Admin Actions: Reset Password, Regenerate Serial, Regenerate OTP
+app.post('/api/admin/action', (req, res) => {
+    const { admin_pass, username, actionType } = req.body;
+    if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const usersDatabase = loadUsers();
+    const user = usersDatabase[username];
+    if (!user) return res.json({ success: false, message: "User nahi mila" });
+
+    if (actionType === 'reset_pass') {
+        user.password = "12345";
+    } else if (actionType === 'regen_serial') {
+        user.serialKey = Math.floor(1000000000 + Math.random() * 900000000).toString();
+        user.isKeyUsed = false;
+    } else if (actionType === 'regen_otp') {
+        user.latLongPass = generateOTP();
+    }
+
+    saveUsers(usersDatabase);
+    res.json({ success: true, message: "Action successful!" });
+});
+
+// 5. Verify & Regenerate Lat/Long Password
 app.post('/api/verify-latlong-pass', (req, res) => {
     const { username, pass } = req.body;
     const usersDatabase = loadUsers();
@@ -111,7 +137,7 @@ app.post('/api/verify-latlong-pass', (req, res) => {
     if (!user) return res.json({ success: false, message: "User nahi mila" });
 
     if (user.latLongPass === pass) {
-        user.latLongPass = generateOTP(); // Auto-regenerate OTP after single use
+        user.latLongPass = generateOTP();
         saveUsers(usersDatabase);
         return res.json({ success: true, message: "Password Verified! New OTP Generated." });
     } else {
@@ -119,7 +145,7 @@ app.post('/api/verify-latlong-pass', (req, res) => {
     }
 });
 
-// 5. Change Password API (Profile Option)
+// 6. Change Password API
 app.post('/api/change-password', (req, res) => {
     const { username, oldPassword, newPassword } = req.body;
     const usersDatabase = loadUsers();
@@ -134,7 +160,7 @@ app.post('/api/change-password', (req, res) => {
     res.json({ success: true, message: "Password kamyabi se badal gaya!" });
 });
 
-// 6. Admin: Update Status / Expiry / Get Users
+// 7. Admin: Update Status / Expiry / Get Users
 app.post('/api/admin/update-status', (req, res) => {
     const { admin_pass, username, status } = req.body;
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
