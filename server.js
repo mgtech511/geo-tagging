@@ -12,21 +12,21 @@ app.post('/api/login', (req, res) => {
     const user = usersDatabase[username];
 
     if (!user || user.password !== password) {
-        return.json({ success: false, message: "Galat Username ya Password!" });
+        return res.json({ success: false, message: "Incorrect Username & Password!" });
     }
 
     if (user.status === 'deactive') {
-        return.json({ success: false, message: "Yeh account deactive hai!" });
+        return res.json({ success: false, message: "Yeh account deactive hai!" });
     }
 
     if (user.expiry && new Date() > new Date(user.expiry)) {
-        return.json({ success: false, message: "Aapka license expire ho chuka hai!" });
+        return res.json({ success: false, message: "license expire !" });
     }
 
     res.json({ success: true, role: user.role, expiry: user.expiry });
 });
 
-// 2. Verify Serial Key API (Only for clients on first login)
+// 2. Verify Serial Key API (First login on device)
 app.post('/api/verify-serial', (req, res) => {
     const { username, serialKey } = req.body;
     const user = usersDatabase[username];
@@ -36,11 +36,11 @@ app.post('/api/verify-serial', (req, res) => {
     }
 
     if (user.serialKey !== serialKey) {
-        return res.json({ success: false, message: "Galat Serial Key!" });
+        return res.json({ success: false, message: "Wrong Serial Key!" });
     }
 
     if (user.isKeyUsed) {
-        return res.json({ success: false, message: "Serial Key pehle hi use ho chuki hai!" });
+        return res.json({ success: false, message: "Serial Key already use!" });
     }
 
     user.isKeyUsed = true;
@@ -53,7 +53,7 @@ app.post('/api/admin/create-user', (req, res) => {
     if (admin_pass !== "admin@1") return res.status(401).json({ success: false, message: "Unauthorized" });
 
     if (usersDatabase[username]) {
-        return res.json({ success: false, message: "User pehle se maujud hai!" });
+        return res.json({ success: false, message: "User already!" });
     }
 
     const randomKey = Math.floor(1000000000 + Math.random() * 900000000).toString();
